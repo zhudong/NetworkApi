@@ -30,5 +30,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "NetworkApi"
-include ':app'
 include ':networklib'
