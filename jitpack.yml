@@ -3,8 +3,6 @@ jdk:
 
 before_install:
   - chmod +x gradlew
-  # 设置 Java 版本
-  - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 install:
   - ./gradlew :networklib:assembleRelease
