@@ -42,7 +42,7 @@ afterEvaluate {
         publications {
             release(MavenPublication) {
                 // 这是关键：使用Android组件
-                from components.release
+                artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
 
                 // 设置Maven坐标
                 groupId = 'com.fyb'
