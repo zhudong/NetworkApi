@@ -2,6 +2,5 @@ jdk:
   - openjdk17
 
 install:
-  - ./gradlew :networklib:assembleRelease
+  - ./gradlew :networklib:assemble
   - ./gradlew :networklib:bundleReleaseAar
-

@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.library'
-    id 'maven-publish'
+    // 移除 maven-publish，JitPack 会自动处理
 }
 
 android {
@@ -25,203 +25,20 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_1_8  // 改回 Java 8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
 dependencies {
-    // Android支持库
-    implementation libs.appcompat
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.9.0'
 
-    // 网络请求相关依赖（使用api确保传递依赖）
     api 'com.lzy.net:okgo:3.0.4'
     api 'com.lzy.net:okserver:2.0.5'
     api 'com.google.code.gson:gson:2.8.1'
 
-    // 测试相关依赖
-    testImplementation libs.junit
-    androidTestImplementation libs.ext.junit
-    androidTestImplementation libs.espresso.core
-}
-
-// ========== GitHub Packages 发布配置 ==========
-
-// 从 gradle.properties 或环境变量读取 GitHub 凭证
-def getGithubUsername() {
-    return findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
-}
-
-def getGithubToken() {
-    return findProperty("gpr.key") ?: System.getenv("GITHUB_TOKEN")
-}
-
-// 从 gradle.properties 读取版本信息
-def libraryVersion = android.defaultConfig.versionName
-def libraryGroupId = 'com.fyb'
-def libraryArtifactId = 'networklib'
-
-publishing {
-    // 配置发布物
-    publications {
-        release(MavenPublication) {
-            groupId = libraryGroupId
-            artifactId = libraryArtifactId
-            version = libraryVersion
-
-            // 发布 AAR 文件
-            artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
-
-            // 自动生成 POM 文件配置
-            pom {
-                name = libraryArtifactId
-                description = 'Network library for Android with OkGo and OkServer'
-                url = 'https://github.com/zhudong/NetworkApi'
-
-                licenses {
-                    license {
-                        name = 'MIT License'
-                        url = 'https://opensource.org/licenses/MIT'
-                    }
-                }
-
-                developers {
-                    developer {
-                        id = 'zhudong'
-                        name = 'zhudong'
-                        email = 'zhudong1987@gmail.com'
-                    }
-                }
-
-                scm {
-                    connection = 'scm:git:git://github.com/zhudong/NetworkApi.git'
-                    developerConnection = 'scm:git:ssh://github.com:zhudong/NetworkApi.git'
-                    url = 'https://github.com/zhudong/NetworkApi'
-                }
-            }
-
-            // 添加依赖到 POM 文件
-            pom.withXml {
-                def dependenciesNode = asNode().appendNode('dependencies')
-
-                // 添加所有 api 和 implementation 依赖
-                configurations.api.allDependencies.each { dep ->
-                    if (dep.group != null && dep.name != null && !dep.name.contains("unspecified")) {
-                        def dependencyNode = dependenciesNode.appendNode('dependency')
-                        dependencyNode.appendNode('groupId', dep.group)
-                        dependencyNode.appendNode('artifactId', dep.name)
-                        dependencyNode.appendNode('version', dep.version)
-                        dependencyNode.appendNode('scope', 'compile')
-                    }
-                }
-
-                configurations.implementation.allDependencies.each { dep ->
-                    if (dep.group != null && dep.name != null && !dep.name.contains("unspecified")) {
-                        def dependencyNode = dependenciesNode.appendNode('dependency')
-                        dependencyNode.appendNode('groupId', dep.group)
-                        dependencyNode.appendNode('artifactId', dep.name)
-                        dependencyNode.appendNode('version', dep.version)
-                        dependencyNode.appendNode('scope', 'runtime')
-                    }
-                }
-            }
-        }
-    }
-
-    // 配置 GitHub Packages 仓库
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/zhudong/NetworkApi")
-            credentials {
-                username = getGithubUsername()
-                password = getGithubToken()
-            }
-        }
-
-        // 可选：同时发布到本地 Maven 仓库（用于测试）
-        maven {
-            name = "local"
-            url = uri("${buildDir}/repo")
-        }
-    }
-}
-
-// ========== JAR 打包任务 ==========
-task fatJar(type: Jar) {
-    group = 'build'
-    description = 'Creates a JAR with all dependencies included'
-
-    archiveBaseName = "${libraryArtifactId}-fat"
-    archiveVersion = libraryVersion
-    archiveClassifier = "all"
-
-    from android.sourceSets.main.java.srcDirs
-    from android.sourceSets.main.kotlin.srcDirs
-
-    from("${buildDir}/intermediates/javac/release/classes")
-
-    from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    }
-
-    exclude('**/BuildConfig.class')
-    exclude('**/R.class')
-    exclude('**/R\$*.class')
-    exclude('META-INF/*.SF')
-    exclude('META-INF/*.DSA')
-    exclude('META-INF/*.RSA')
-
-    dependsOn('assembleRelease')
-}
-
-// ========== 发布任务 ==========
-task publishToGitHubPackages {
-    group = 'publishing'
-    description = 'Publishes the library to GitHub Packages'
-    dependsOn('publishReleasePublicationToGitHubPackagesRepository')
-}
-
-task publishLocally {
-    group = 'publishing'
-    description = 'Publishes the library to local Maven repository'
-    dependsOn('publishReleasePublicationToLocalRepository')
-}
-
-// ========== 辅助任务 ==========
-task printPublishingInfo {
-    group = 'help'
-    description = 'Prints publishing configuration information'
-
-    doLast {
-        println "=== Publishing Configuration ==="
-        println "Group ID:     ${libraryGroupId}"
-        println "Artifact ID:  ${libraryArtifactId}"
-        println "Version:      ${libraryVersion}"
-        println ""
-        println "=== GitHub Packages ==="
-        println "Repository:   https://maven.pkg.github.com/zhudong/NetworkApi"
-        println "Username:     ${getGithubUsername() ?: 'NOT SET (set in gradle.properties or GITHUB_USERNAME env var)'}"
-        println "Token:        ${getGithubToken() ? 'SET' : 'NOT SET (set in gradle.properties or GITHUB_TOKEN env var)'}"
-        println ""
-        println "=== Commands ==="
-        println "./gradlew publishToGitHubPackages    - Publish to GitHub Packages"
-        println "./gradlew publishLocally            - Publish to local Maven repository"
-        println "./gradlew build                     - Build the library"
-        println "./gradlew fatJar                    - Create fat JAR with all dependencies"
-        println "./gradlew printPublishingInfo       - Show this information"
-    }
-}
-
-// 自动构建和准备发布文件
-task prepareForPublishing {
-    group = 'build'
-    description = 'Prepares the library for publishing'
-    dependsOn('assembleRelease', 'generatePomFileForReleasePublication')
-}
-
-// 在发布前确保构建完成
-tasks.withType(AbstractPublishToMaven).configureEach {
-    dependsOn('prepareForPublishing')
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
