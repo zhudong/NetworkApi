@@ -1,15 +1,7 @@
 jdk:
   - openjdk17
 
-before_install:
-  - chmod +x gradlew
-
 install:
   - ./gradlew :networklib:assembleRelease
   - ./gradlew :networklib:bundleReleaseAar
 
-# 可选：缓存依赖
-cache:
-  directories:
-    - ~/.gradle/caches
-    - ~/.gradle/wrapper

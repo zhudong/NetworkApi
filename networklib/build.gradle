@@ -63,6 +63,72 @@ def libraryGroupId = 'com.fyb'
 def libraryArtifactId = 'networklib'
 
 publishing {
+    // 配置发布物
+    publications {
+        release(MavenPublication) {
+            groupId = libraryGroupId
+            artifactId = libraryArtifactId
+            version = libraryVersion
+
+            // 发布 AAR 文件
+            artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
+
+            // 自动生成 POM 文件配置
+            pom {
+                name = libraryArtifactId
+                description = 'Network library for Android with OkGo and OkServer'
+                url = 'https://github.com/zhudong/NetworkApi'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'zhudong'
+                        name = 'zhudong'
+                        email = 'zhudong1987@gmail.com'
+                    }
+                }
+
+                scm {
+                    connection = 'scm:git:git://github.com/zhudong/NetworkApi.git'
+                    developerConnection = 'scm:git:ssh://github.com:zhudong/NetworkApi.git'
+                    url = 'https://github.com/zhudong/NetworkApi'
+                }
+            }
+
+            // 添加依赖到 POM 文件
+            pom.withXml {
+                def dependenciesNode = asNode().appendNode('dependencies')
+
+                // 添加所有 api 和 implementation 依赖
+                configurations.api.allDependencies.each { dep ->
+                    if (dep.group != null && dep.name != null && !dep.name.contains("unspecified")) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', dep.group)
+                        dependencyNode.appendNode('artifactId', dep.name)
+                        dependencyNode.appendNode('version', dep.version)
+                        dependencyNode.appendNode('scope', 'compile')
+                    }
+                }
+
+                configurations.implementation.allDependencies.each { dep ->
+                    if (dep.group != null && dep.name != null && !dep.name.contains("unspecified")) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', dep.group)
+                        dependencyNode.appendNode('artifactId', dep.name)
+                        dependencyNode.appendNode('version', dep.version)
+                        dependencyNode.appendNode('scope', 'runtime')
+                    }
+                }
+            }
+        }
+    }
+
     // 配置 GitHub Packages 仓库
     repositories {
         maven {
@@ -74,6 +140,11 @@ publishing {
             }
         }
 
+        // 可选：同时发布到本地 Maven 仓库（用于测试）
+        maven {
+            name = "local"
+            url = uri("${buildDir}/repo")
+        }
     }
 }
 
