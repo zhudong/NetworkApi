@@ -1,0 +1,232 @@
+plugins {
+    id 'com.android.library'
+    id 'maven-publish' // Add Maven Publish plugin
+}
+
+android {
+    namespace 'com.fyb.networklib'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // Android支持库（保持implementation，不传递）
+    implementation libs.appcompat
+    // Material Design组件
+    implementation 'com.google.android.material:material:1.9.0'
+
+    // ========== 网络请求相关依赖 ==========
+    // 尝试不同的传递方案
+    // 方案1：使用api强制传递（Android Library的标准方式）
+    api 'com.lzy.net:okgo:3.0.4'
+    api 'com.lzy.net:okserver:2.0.5'
+    api 'com.google.code.gson:gson:2.8.1'
+
+    // ========== 测试相关依赖 ==========
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            groupId = 'com.fyb'
+            artifactId = 'networklib'
+            version = android.defaultConfig.versionName
+
+            artifact("$buildDir/outputs/aar/networklib-release.aar")
+        }
+    }
+}
+
+
+// ========== JAR打包任务（方案2：生成包含依赖的JAR）=========
+
+// 创建包含所有依赖的Fat JAR
+task fatJar(type: Jar) {
+    group = 'build'
+    description = 'Creates a JAR with all dependencies included'
+
+    archiveBaseName = "networklib-fat"
+    archiveVersion = android.defaultConfig.versionName
+    archiveClassifier = "all"
+
+    from android.sourceSets.main.java.srcDirs
+    from android.sourceSets.main.kotlin.srcDirs
+
+    // 包含编译后的类文件
+    from("${buildDir}/intermediates/javac/release/classes")
+
+    // 包含所有依赖的类文件
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    exclude('**/BuildConfig.class')
+    exclude('**/R.class')
+    exclude('**/R\$*.class')
+    exclude('META-INF/*.SF')
+    exclude('META-INF/*.DSA')
+    exclude('META-INF/*.RSA')
+
+    manifest {
+        attributes(
+            'Implementation-Title': 'NetworkLib (with all dependencies)',
+            'Implementation-Version': android.defaultConfig.versionName,
+            'Built-By': System.getProperty('user.name'),
+            'Built-Date': new Date().toString(),
+            'Created-By': "Gradle ${gradle.gradleVersion}",
+            'Main-Class': 'com.fyb.networklib.api.NetworkApi' // 可选
+        )
+    }
+
+    dependsOn('assembleRelease')
+}
+
+// ========== 依赖传递测试任务 ==========
+
+// 直接测试依赖传递的简单方法
+task testDependencyPassing {
+    group = 'verification'
+    description = 'Test dependency passing by checking if api dependencies work'
+
+    doLast {
+        println "=== Testing Dependency Passing ==="
+        println ""
+
+        // 方法1：检查项目依赖树
+        println "1. Checking project dependency tree..."
+        println "   Run: ./gradlew :networklib:dependencies --configuration releaseRuntimeClasspath"
+        println ""
+
+        // 方法2：创建简单测试
+        println "2. Creating simple dependency test..."
+        def testDir = file("${project.buildDir}/dependency-test")
+        testDir.mkdirs()
+
+        def testFile = file("${testDir}/DependencyTest.java")
+        testFile.text = """
+import com.lzy.okgo.OkGo;
+import com.lzy.okgo.model.Response;
+import com.google.gson.Gson;
+
+public class DependencyTest {
+    public static void main(String[] args) {
+        // Test if dependencies are accessible
+        OkGo.getInstance();  // Should work if OkGo is available
+        new Gson();          // Should work if Gson is available
+        Response response = null; // Should work if Response is available
+        System.out.println("All dependencies accessible!");
+    }
+}
+"""
+
+        println "   Created test file: ${testFile.absolutePath}"
+        println ""
+
+        // 方法3：检查实际的依赖传递
+        println "3. To verify dependency passing:"
+        println "   - Create a new Android project"
+        println "   - Add only: implementation files('path/to/networklib-release.aar')"
+        println "   - Try to import: com.lzy.okgo.model.Response"
+        println "   - If import succeeds, dependencies passed!"
+        println "   - If import fails, dependencies not passed"
+        println ""
+
+        // 方法4：显示当前配置
+        println "4. Current dependency configuration:"
+        println "   - api 'com.lzy.net:okgo:3.0.4'"
+        println "   - api 'com.lzy.net:okserver:2.0.5'"
+        println "   - api 'com.google.code.gson:gson:2.8.1'"
+        println ""
+        println "   These should be passed to consuming projects"
+    }
+}
+
+// 创建自定义任务来显示AAR文件位置
+task showAarLocation {
+    group = 'help'
+    description = 'Shows the location of generated AAR files'
+
+    doLast {
+        println "=== AAR Files Location ==="
+        println "Debug AAR:   ${project.buildDir}/outputs/aar/networklib-debug.aar"
+        println "Release AAR: ${project.buildDir}/outputs/aar/networklib-release.aar"
+        println ""
+        println "=== JAR Files Location ==="
+        println "Fat JAR:     ${project.buildDir}/libs/networklib-fat-${android.defaultConfig.versionName}-all.jar"
+        println ""
+        println "Commands:"
+        println "  ./gradlew assembleDebug   - Build debug AAR"
+        println "  ./gradlew assembleRelease - Build release AAR"
+        println "  ./gradlew fatJar          - Build JAR with dependencies"
+        println "  ./gradlew build           - Build both AAR and JAR"
+        println "  ./gradlew :networklib:testDependencyPassing - Test dependency passing"
+    }
+}
+
+// 创建简单任务来复制AAR文件到指定目录（可选）
+task copyAarFiles(type: Copy) {
+    group = 'build'
+    description = 'Copies AAR files to a specified directory'
+
+    // 指定要复制的文件
+    from("${project.buildDir}/outputs/aar/") {
+        include '*.aar'
+    }
+
+    // 指定目标目录（可以自定义）
+    into "${project.projectDir}/aar-output/"
+
+    // 重命名文件以包含版本信息
+    rename { fileName ->
+        if (fileName.contains('debug')) {
+            return "networklib-debug-${android.defaultConfig.versionName}.aar"
+        } else if (fileName.contains('release')) {
+            return "networklib-release-${android.defaultConfig.versionName}.aar"
+        }
+        return fileName
+    }
+
+    // 只有当AAR文件存在时才执行
+    onlyIf {
+        file("${project.buildDir}/outputs/aar/").exists() &&
+                fileTree("${project.buildDir}/outputs/aar/").include("*.aar").files.size() > 0
+    }
+}
+
+// 确保在复制之前先构建
+copyAarFiles.dependsOn('assembleDebug', 'assembleRelease')
+
+// 创建一个组合任务，一次构建和复制所有AAR
+task buildAndCopyAars {
+    group = 'build'
+    description = 'Builds and copies all AAR files'
+    dependsOn('assembleDebug', 'assembleRelease', 'copyAarFiles')
+
+    doLast {
+        println "AAR files have been built and copied to: ${project.projectDir}/aar-output/"
+    }
+}
