@@ -4,3 +4,4 @@ jdk:
 install:
   - ./gradlew :networklib:assembleRelease
   - ./gradlew :networklib:generatePomFileForReleasePublication
+  - ./gradlew :networklib:publishToMavenLocal  # 新增这一行
