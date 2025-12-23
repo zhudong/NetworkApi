@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.library'
-    id 'maven-publish' // Add Maven Publish plugin
+    id 'maven-publish'
 }
 
 android {
@@ -31,55 +31,137 @@ android {
 }
 
 dependencies {
-    // Android支持库（保持implementation，不传递）
+    // Android支持库
     implementation libs.appcompat
-    // Material Design组件
     implementation 'com.google.android.material:material:1.9.0'
 
-    // ========== 网络请求相关依赖 ==========
-    // 尝试不同的传递方案
-    // 方案1：使用api强制传递（Android Library的标准方式）
+    // 网络请求相关依赖（使用api确保传递依赖）
     api 'com.lzy.net:okgo:3.0.4'
     api 'com.lzy.net:okserver:2.0.5'
     api 'com.google.code.gson:gson:2.8.1'
 
-    // ========== 测试相关依赖 ==========
+    // 测试相关依赖
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
 }
 
+// ========== GitHub Packages 发布配置 ==========
+
+// 从 gradle.properties 或环境变量读取 GitHub 凭证
+def getGithubUsername() {
+    return findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
+}
+
+def getGithubToken() {
+    return findProperty("gpr.key") ?: System.getenv("GITHUB_TOKEN")
+}
+
+// 从 gradle.properties 读取版本信息
+def libraryVersion = android.defaultConfig.versionName
+def libraryGroupId = 'com.fyb'
+def libraryArtifactId = 'networklib'
+
 publishing {
+    // 配置发布物
     publications {
         release(MavenPublication) {
-            groupId = 'com.fyb'
-            artifactId = 'networklib'
-            version = android.defaultConfig.versionName
+            groupId = libraryGroupId
+            artifactId = libraryArtifactId
+            version = libraryVersion
 
-            artifact("$buildDir/outputs/aar/networklib-release.aar")
+            // 发布 AAR 文件
+            artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
+
+            // 自动生成 POM 文件配置
+            pom {
+                name = libraryArtifactId
+                description = 'Network library for Android with OkGo and OkServer'
+                url = 'https://github.com/zhudong/NetworkApi'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'your-github-username'
+                        name = 'Your Name'
+                        email = 'your.email@example.com'
+                    }
+                }
+
+                scm {
+                    connection = 'scm:git:git://github.com/zhudong/NetworkApi.git'
+                    developerConnection = 'scm:git:ssh://github.com:zhudong/NetworkApi.git'
+                    url = 'https://github.com/zhudong/NetworkApi'
+                }
+            }
+
+            // 添加依赖到 POM 文件
+            pom.withXml {
+                def dependenciesNode = asNode().appendNode('dependencies')
+
+                // 添加所有 api 和 implementation 依赖
+                configurations.api.allDependencies.each { dep ->
+                    if (dep.group != null && dep.name != null && !dep.name.contains("unspecified")) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', dep.group)
+                        dependencyNode.appendNode('artifactId', dep.name)
+                        dependencyNode.appendNode('version', dep.version)
+                        dependencyNode.appendNode('scope', 'compile')
+                    }
+                }
+
+                configurations.implementation.allDependencies.each { dep ->
+                    if (dep.group != null && dep.name != null && !dep.name.contains("unspecified")) {
+                        def dependencyNode = dependenciesNode.appendNode('dependency')
+                        dependencyNode.appendNode('groupId', dep.group)
+                        dependencyNode.appendNode('artifactId', dep.name)
+                        dependencyNode.appendNode('version', dep.version)
+                        dependencyNode.appendNode('scope', 'runtime')
+                    }
+                }
+            }
+        }
+    }
+
+    // 配置 GitHub Packages 仓库
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/zhudong/NetworkApi")
+            credentials {
+                username = getGithubUsername()
+                password = getGithubToken()
+            }
+        }
+
+        // 可选：同时发布到本地 Maven 仓库（用于测试）
+        maven {
+            name = "local"
+            url = uri("${buildDir}/repo")
         }
     }
 }
 
-
-// ========== JAR打包任务（方案2：生成包含依赖的JAR）=========
-
-// 创建包含所有依赖的Fat JAR
+// ========== JAR 打包任务 ==========
 task fatJar(type: Jar) {
     group = 'build'
     description = 'Creates a JAR with all dependencies included'
 
-    archiveBaseName = "networklib-fat"
-    archiveVersion = android.defaultConfig.versionName
+    archiveBaseName = "${libraryArtifactId}-fat"
+    archiveVersion = libraryVersion
     archiveClassifier = "all"
 
     from android.sourceSets.main.java.srcDirs
     from android.sourceSets.main.kotlin.srcDirs
 
-    // 包含编译后的类文件
     from("${buildDir}/intermediates/javac/release/classes")
 
-    // 包含所有依赖的类文件
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
@@ -91,142 +173,55 @@ task fatJar(type: Jar) {
     exclude('META-INF/*.DSA')
     exclude('META-INF/*.RSA')
 
-    manifest {
-        attributes(
-            'Implementation-Title': 'NetworkLib (with all dependencies)',
-            'Implementation-Version': android.defaultConfig.versionName,
-            'Built-By': System.getProperty('user.name'),
-            'Built-Date': new Date().toString(),
-            'Created-By': "Gradle ${gradle.gradleVersion}",
-            'Main-Class': 'com.fyb.networklib.api.NetworkApi' // 可选
-        )
-    }
-
     dependsOn('assembleRelease')
 }
 
-// ========== 依赖传递测试任务 ==========
-
-// 直接测试依赖传递的简单方法
-task testDependencyPassing {
-    group = 'verification'
-    description = 'Test dependency passing by checking if api dependencies work'
-
-    doLast {
-        println "=== Testing Dependency Passing ==="
-        println ""
-
-        // 方法1：检查项目依赖树
-        println "1. Checking project dependency tree..."
-        println "   Run: ./gradlew :networklib:dependencies --configuration releaseRuntimeClasspath"
-        println ""
-
-        // 方法2：创建简单测试
-        println "2. Creating simple dependency test..."
-        def testDir = file("${project.buildDir}/dependency-test")
-        testDir.mkdirs()
-
-        def testFile = file("${testDir}/DependencyTest.java")
-        testFile.text = """
-import com.lzy.okgo.OkGo;
-import com.lzy.okgo.model.Response;
-import com.google.gson.Gson;
-
-public class DependencyTest {
-    public static void main(String[] args) {
-        // Test if dependencies are accessible
-        OkGo.getInstance();  // Should work if OkGo is available
-        new Gson();          // Should work if Gson is available
-        Response response = null; // Should work if Response is available
-        System.out.println("All dependencies accessible!");
-    }
-}
-"""
-
-        println "   Created test file: ${testFile.absolutePath}"
-        println ""
-
-        // 方法3：检查实际的依赖传递
-        println "3. To verify dependency passing:"
-        println "   - Create a new Android project"
-        println "   - Add only: implementation files('path/to/networklib-release.aar')"
-        println "   - Try to import: com.lzy.okgo.model.Response"
-        println "   - If import succeeds, dependencies passed!"
-        println "   - If import fails, dependencies not passed"
-        println ""
-
-        // 方法4：显示当前配置
-        println "4. Current dependency configuration:"
-        println "   - api 'com.lzy.net:okgo:3.0.4'"
-        println "   - api 'com.lzy.net:okserver:2.0.5'"
-        println "   - api 'com.google.code.gson:gson:2.8.1'"
-        println ""
-        println "   These should be passed to consuming projects"
-    }
+// ========== 发布任务 ==========
+task publishToGitHubPackages {
+    group = 'publishing'
+    description = 'Publishes the library to GitHub Packages'
+    dependsOn('publishReleasePublicationToGitHubPackagesRepository')
 }
 
-// 创建自定义任务来显示AAR文件位置
-task showAarLocation {
+task publishLocally {
+    group = 'publishing'
+    description = 'Publishes the library to local Maven repository'
+    dependsOn('publishReleasePublicationToLocalRepository')
+}
+
+// ========== 辅助任务 ==========
+task printPublishingInfo {
     group = 'help'
-    description = 'Shows the location of generated AAR files'
+    description = 'Prints publishing configuration information'
 
     doLast {
-        println "=== AAR Files Location ==="
-        println "Debug AAR:   ${project.buildDir}/outputs/aar/networklib-debug.aar"
-        println "Release AAR: ${project.buildDir}/outputs/aar/networklib-release.aar"
+        println "=== Publishing Configuration ==="
+        println "Group ID:     ${libraryGroupId}"
+        println "Artifact ID:  ${libraryArtifactId}"
+        println "Version:      ${libraryVersion}"
         println ""
-        println "=== JAR Files Location ==="
-        println "Fat JAR:     ${project.buildDir}/libs/networklib-fat-${android.defaultConfig.versionName}-all.jar"
+        println "=== GitHub Packages ==="
+        println "Repository:   https://maven.pkg.github.com/zhudong/NetworkApi"
+        println "Username:     ${getGithubUsername() ?: 'NOT SET (set in gradle.properties or GITHUB_USERNAME env var)'}"
+        println "Token:        ${getGithubToken() ? 'SET' : 'NOT SET (set in gradle.properties or GITHUB_TOKEN env var)'}"
         println ""
-        println "Commands:"
-        println "  ./gradlew assembleDebug   - Build debug AAR"
-        println "  ./gradlew assembleRelease - Build release AAR"
-        println "  ./gradlew fatJar          - Build JAR with dependencies"
-        println "  ./gradlew build           - Build both AAR and JAR"
-        println "  ./gradlew :networklib:testDependencyPassing - Test dependency passing"
+        println "=== Commands ==="
+        println "./gradlew publishToGitHubPackages    - Publish to GitHub Packages"
+        println "./gradlew publishLocally            - Publish to local Maven repository"
+        println "./gradlew build                     - Build the library"
+        println "./gradlew fatJar                    - Create fat JAR with all dependencies"
+        println "./gradlew printPublishingInfo       - Show this information"
     }
 }
 
-// 创建简单任务来复制AAR文件到指定目录（可选）
-task copyAarFiles(type: Copy) {
+// 自动构建和准备发布文件
+task prepareForPublishing {
     group = 'build'
-    description = 'Copies AAR files to a specified directory'
-
-    // 指定要复制的文件
-    from("${project.buildDir}/outputs/aar/") {
-        include '*.aar'
-    }
-
-    // 指定目标目录（可以自定义）
-    into "${project.projectDir}/aar-output/"
-
-    // 重命名文件以包含版本信息
-    rename { fileName ->
-        if (fileName.contains('debug')) {
-            return "networklib-debug-${android.defaultConfig.versionName}.aar"
-        } else if (fileName.contains('release')) {
-            return "networklib-release-${android.defaultConfig.versionName}.aar"
-        }
-        return fileName
-    }
-
-    // 只有当AAR文件存在时才执行
-    onlyIf {
-        file("${project.buildDir}/outputs/aar/").exists() &&
-                fileTree("${project.buildDir}/outputs/aar/").include("*.aar").files.size() > 0
-    }
+    description = 'Prepares the library for publishing'
+    dependsOn('assembleRelease', 'generatePomFileForReleasePublication')
 }
 
-// 确保在复制之前先构建
-copyAarFiles.dependsOn('assembleDebug', 'assembleRelease')
-
-// 创建一个组合任务，一次构建和复制所有AAR
-task buildAndCopyAars {
-    group = 'build'
-    description = 'Builds and copies all AAR files'
-    dependsOn('assembleDebug', 'assembleRelease', 'copyAarFiles')
-
-    doLast {
-        println "AAR files have been built and copied to: ${project.projectDir}/aar-output/"
-    }
+// 在发布前确保构建完成
+tasks.withType(AbstractPublishToMaven).configureEach {
+    dependsOn('prepareForPublishing')
 }
