@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.library'
-    // 移除 maven-publish，JitPack 会自动处理
+    id 'maven-publish'  // 添加maven-publish插件
 }
 
 android {
@@ -25,20 +25,58 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8  // 改回 Java 8
+        sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.9.0'
-
     api 'com.lzy.net:okgo:3.0.4'
     api 'com.lzy.net:okserver:2.0.5'
     api 'com.google.code.gson:gson:2.8.1'
+}
 
-    testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+// ========== 最小的发布配置 ==========
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                // 这是关键：使用Android组件
+                from components.release
+
+                // 设置Maven坐标
+                groupId = 'com.fyb'
+                artifactId = 'networklib'
+                version = '1.0.0'
+
+                // 添加POM信息
+                pom {
+                    name = 'NetworkLib'
+                    description = 'Network library for Android'
+                    url = 'https://github.com/zhudong/NetworkApi'
+
+                    licenses {
+                        license {
+                            name = 'MIT License'
+                            url = 'https://opensource.org/licenses/MIT'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = 'zhudong'
+                            name = 'zhudong'
+                            email = 'zhudong1987@gmail.com'
+                        }
+                    }
+
+                    scm {
+                        connection = 'scm:git:git://github.com/zhudong/NetworkApi.git'
+                        developerConnection = 'scm:git:ssh://github.com:zhudong/NetworkApi.git'
+                        url = 'https://github.com/zhudong/NetworkApi'
+                    }
+                }
+            }
+        }
+    }
 }
